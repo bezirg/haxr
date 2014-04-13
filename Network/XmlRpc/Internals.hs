@@ -104,14 +104,14 @@ xmlRpcDateFormat = "%Y%m%dT%H:%M:%S"
 type Err m a = ErrorT String m a
 
 -- | Evaluate the argument and catch error call exceptions
-errorToErr :: (Show e, MonadError e m) => a -> Err m a
+errorToErr :: Monad m => a -> Err m a
 errorToErr x = unsafePerformIO (liftM return (evaluate x) `catch` handleErr)
   where handleErr :: Monad m => SomeException -> IO (Err m a)
         handleErr = return . throwError . show
 
 -- | Catch IO errors in the error monad.
-ioErrorToErr :: IO a -> Err IO a
-ioErrorToErr x = (liftIO x >>= return) `catchError` \e -> throwError (show e)
+ioErrorToErr :: (Monad m) => m a -> Err m a
+ioErrorToErr x = (lift x >>= return) `catchError` \e -> throwError (show e)
 
 -- | Handle errors from the error monad.
 handleError :: Monad m => (String -> m a) -> Err m a -> m a
@@ -575,7 +575,7 @@ parseCall c =
     fromXRMethodCall xc
 
 -- | Parses a method response from XML.
-parseResponse :: (Show e, MonadError e m) => String -> Err m MethodResponse
+parseResponse :: Monad m => String -> Err m MethodResponse
 parseResponse c =
     do
     mxr <- errorToErr (readXml c)

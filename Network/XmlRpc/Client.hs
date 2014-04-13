@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses, UndecidableInstances #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.XmlRpc.Client
@@ -47,6 +49,8 @@ import           Network.URI
 
 import           Network.HTTP
 import           Network.Stream
+import qualified Network.Browser as B
+import           Control.Monad.Error
 
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL (ByteString, toChunks)
@@ -60,7 +64,7 @@ handleResponse (Fault code str) = fail ("Error " ++ show code ++ ": " ++ str)
 
 -- | Sends a method call to a server and returns the response.
 --   Throws an exception if the response was an error.
-doCall :: String -> [Header] -> MethodCall -> Err IO MethodResponse
+doCall :: String -> [Header] -> MethodCall -> Err (B.BrowserAction (HandleStream U.ByteString)) MethodResponse
 doCall url headers mc =
     do
     let req = renderCall mc
@@ -78,7 +82,7 @@ doCall url headers mc =
 call :: String -- ^ URL for the XML-RPC server.
      -> String -- ^ Method name.
      -> [Value] -- ^ The arguments.
-     -> Err IO Value -- ^ The result
+     -> Err (B.BrowserAction (HandleStream U.ByteString)) Value -- ^ The result
 call url method args = doCall url [] (MethodCall method args) >>= handleResponse
 
 -- | Low-level method calling function. Use this function if
@@ -90,7 +94,7 @@ callWithHeaders :: String -- ^ URL for the XML-RPC server.
                 -> String -- ^ Method name.
                 -> [Header] -- ^ Extra headers to add to HTTP request.
                 -> [Value] -- ^ The arguments.
-                -> Err IO Value -- ^ The result
+                -> Err (B.BrowserAction (HandleStream U.ByteString)) Value -- ^ The result
 callWithHeaders url method headers args =
     doCall url headers (MethodCall method args) >>= handleResponse
 
@@ -122,10 +126,13 @@ remoteWithHeaders u m headers =
 class Remote a where
     remote_ :: (String -> String)        -- ^ Will be applied to all error
                                          --   messages.
-            -> ([Value] -> Err IO Value)
+            -> ([Value] -> Err (B.BrowserAction (HandleStream U.ByteString)) Value)
             -> a
 
-instance XmlRpcType a => Remote (IO a) where
+-- instance XmlRpcType a => Remote (IO a) where
+--     remote_ h f = handleError (fail . h) $ f [] >>= fromValue
+
+instance XmlRpcType a => Remote (B.BrowserAction (HandleStream U.ByteString) a) where
     remote_ h f = handleError (fail . h) $ f [] >>= fromValue
 
 instance (XmlRpcType a, Remote b) => Remote (a -> b) where
@@ -148,7 +155,7 @@ handleE _ (Right v) = return v
 -- | Post some content to a uri, return the content of the response
 --   or an error.
 -- FIXME: should we really use fail?
-post :: String -> [Header] -> BSL.ByteString -> IO String
+post :: String -> [Header] -> BSL.ByteString -> B.BrowserAction (HandleStream U.ByteString) String
 post url headers content = do
     uri <- maybeFail ("Bad URI: '" ++ url ++ "'") (parseURI url)
     let a = uriAuthority uri
@@ -159,14 +166,14 @@ post url headers content = do
 -- | Post some content to a uri, return the content of the response
 --   or an error.
 -- FIXME: should we really use fail?
-post_ :: URI -> URIAuth -> [Header] -> BSL.ByteString -> IO String
+post_ :: URI -> URIAuth -> [Header] -> BSL.ByteString -> B.BrowserAction (HandleStream U.ByteString) String
 post_ uri auth headers content =
     do
-    eresp <- simpleHTTP (request uri auth headers (BS.concat . BSL.toChunks $ content))
-    resp <- handleE (fail . show) eresp
+    (_uri, resp) <- B.request (request uri auth headers (BS.concat . BSL.toChunks $ content))
     case rspCode resp of
                       (2,0,0) -> return (U.toString (rspBody resp))
                       _ -> fail (httpError resp)
+
     where
     showRspCode (a,b,c) = map intToDigit [a,b,c]
     httpError resp = showRspCode (rspCode resp) ++ " " ++ rspReason resp
@@ -205,3 +212,4 @@ authHdr u p = Just (Header HdrAuthorization ("Basic " ++ base64encode user_pass)
 
 maybeFail :: Monad m => String -> Maybe a -> m a
 maybeFail msg = maybe (fail msg) return
+
