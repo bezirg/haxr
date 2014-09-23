@@ -1,5 +1,5 @@
 Name: haxr-browser
-Version: 0.0.1
+Version: 0.0.2
 Cabal-version: >=1.10
 Build-type: Simple
 Copyright: Bjorn Bringert, 2003-2006
@@ -25,10 +25,14 @@ Source-repository head
   type:     git
   location: git://github.com/bezirg/haxr.git
 
+flag network-uri
+   description: Get Network.URI from the network-uri package
+   default: True
+
 Library
   Build-depends: base < 5,
                  mtl,
-                 network < 3,
+                 network < 2.7,
                  HaXml >= 1.22 && < 1.25,
                  HTTP >= 4000,
                  bytestring,
@@ -40,6 +44,12 @@ Library
                  utf8-string,
                  template-haskell,
                  blaze-builder >= 0.2 && < 0.4
+
+  if flag(network-uri)
+    build-depends: network-uri >= 2.6, network >= 2.6
+  else
+    build-depends: network-uri < 2.6, network < 2.6
+
   Exposed-Modules:
         Network.XmlRpc.Client,
         Network.XmlRpc.Server,
