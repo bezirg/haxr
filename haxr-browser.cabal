@@ -31,8 +31,7 @@ flag network-uri
 
 Library
   Build-depends: base < 5,
-                 -- added mtl constraint to make opennebula compile
-                 mtl<2.2, 
+                 mtl,
                  network < 2.7,
                  HaXml >= 1.22 && < 1.25,
                  HTTP >= 4000,
