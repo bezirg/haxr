@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.XmlRpc.Internals
@@ -38,7 +39,7 @@ Err, maybeToM, handleError, ioErrorToErr
 
 import           Control.Exception
 import           Control.Monad
-import           Control.Monad.Error
+import           Control.Monad.Except
 import           Data.Char
 import           Data.List
 import           Data.Maybe
@@ -50,8 +51,11 @@ import           Data.Time.LocalTime
 import           Numeric (showFFloat)
 import           Prelude hiding (showString, catch)
 import           System.IO.Unsafe (unsafePerformIO)
-import           System.Locale
 import           System.Time (CalendarTime(..))
+
+#if ! MIN_VERSION_time(1,5,0)
+import           System.Locale (defaultTimeLocale)
+#endif
 
 import qualified Data.ByteString.Char8 as BS (ByteString, pack, unpack)
 import qualified Data.ByteString.Lazy.Char8 as BSL (ByteString, pack)
@@ -101,7 +105,7 @@ xmlRpcDateFormat = "%Y%m%dT%H:%M:%S"
 -- Error monad stuff
 --
 
-type Err m a = ErrorT String m a
+type Err m a = ExceptT String m a
 
 -- | Evaluate the argument and catch error call exceptions
 errorToErr :: Monad m => a -> Err m a
@@ -116,7 +120,7 @@ ioErrorToErr x = (lift x >>= return) `catchError` \e -> throwError (show e)
 -- | Handle errors from the error monad.
 handleError :: Monad m => (String -> m a) -> Err m a -> m a
 handleError h m = do
-		  Right x <- runErrorT (catchError m (lift . h))
+		  Right x <- runExceptT (catchError m (lift . h))
 		  return x
 
 errorRead :: (Monad m, Read a) =>
